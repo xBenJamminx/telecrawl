@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="telecrawl",
-    version="0.2.0",
+    version="0.3.0",
     author="Ben Jammin",
     description="Telegram group memory layer with SQLite + FTS5 full-text search",
     long_description=long_description,
@@ -21,6 +21,8 @@ setup(
     install_requires=[
         "telethon>=1.36.0",
         "python-dotenv>=1.0.0",
+        "tomli>=2.0.0;python_version<'3.11'",
+        "tomli-w>=1.0.0",
     ],
     entry_points={
         "console_scripts": [

@@ -154,6 +154,74 @@ class TeleCrawlDB:
             return '"' + query.replace('"', '') + '"'
         return query
 
+    def get_messages(self,
+                     chat_id: Optional[int] = None,
+                     sender: Optional[str] = None,
+                     sender_id: Optional[int] = None,
+                     topic_id: Optional[int] = None,
+                     since: Optional[float] = None,
+                     limit: int = 50,
+                     oldest_first: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get messages with rich filtering.
+
+        Args:
+            chat_id: Filter by chat ID
+            sender: Filter by username or first_name (case-insensitive partial match)
+            sender_id: Filter by sender's Telegram ID
+            topic_id: Filter by forum topic ID
+            since: Unix timestamp - only return messages after this time
+            limit: Max results (default 50)
+            oldest_first: If True, order chronologically. Default newest first.
+
+        Returns:
+            List of message dicts.
+        """
+        cursor = self.conn.cursor()
+
+        conditions = []
+        params = []
+
+        if chat_id is not None:
+            conditions.append("chat_id = ?")
+            params.append(chat_id)
+
+        if sender is not None:
+            conditions.append(
+                "(LOWER(sender_username) LIKE ? OR LOWER(sender_first_name) LIKE ?)"
+            )
+            pattern = f"%{sender.lower()}%"
+            params.extend([pattern, pattern])
+
+        if sender_id is not None:
+            conditions.append("sender_id = ?")
+            params.append(sender_id)
+
+        if topic_id is not None:
+            conditions.append("topic_id = ?")
+            params.append(topic_id)
+
+        if since is not None:
+            conditions.append("timestamp >= ?")
+            params.append(since)
+
+        where = ""
+        if conditions:
+            where = "WHERE " + " AND ".join(conditions)
+
+        order = "ASC" if oldest_first else "DESC"
+
+        sql = f"""
+            SELECT * FROM messages
+            {where}
+            ORDER BY timestamp {order}
+            LIMIT ?
+        """
+        params.append(limit)
+
+        results = cursor.execute(sql, params).fetchall()
+        return [{k: row[k] for k in row.keys()} for row in results]
+
     def search(self, query: str, chat_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
         """Search messages using FTS5 with BM25 ranking."""
         cursor = self.conn.cursor()

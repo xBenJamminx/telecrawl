@@ -12,11 +12,15 @@ Telecrawl solves this by using [Telethon](https://github.com/LonamiWebs/Telethon
 
 ## Features
 
+- **Interactive init** — Discover and select chats to track, saves to `~/.telecrawl/config.toml`
 - **Full history sync** — Fetches every message in a chat, not just new ones
 - **Incremental sync** — After first sync, only fetches messages since last position
+- **Rich message filtering** — Browse by author, time range, topic, with `--json` output
 - **Real-time tail** — Background daemon captures messages as they arrive
 - **Full-text search** — SQLite FTS5 with BM25 relevance ranking
 - **FTS5 query sanitization** — Handles URLs, hyphens, and special characters cleanly
+- **TOML config** — No more passing `--chat-id` every time
+- **JSON output** — `--json` flag on every command for piping to other tools
 - **Headless auth** — Two-step authentication for servers without interactive terminals
 - **Systemd ready** — Runs as a background service for continuous capture
 
@@ -59,23 +63,29 @@ python -m telecrawl.auth verify 12345
 
 Session persists after first auth — no need to re-authenticate.
 
-### 4. Get Your Chat ID
+### 4. Initialize Config
 
-You can find chat IDs using Telegram clients or bots. Group chat IDs are negative numbers (e.g., `-1001234567890`).
+Discover your chats and select which ones to track:
+
+```bash
+telecrawl init
+```
+
+This connects to Telegram, lists all your groups/channels, and lets you pick which to track. Saves config to `~/.telecrawl/config.toml`. After init, you never need `--chat-id` again.
 
 ## Usage
 
 ### Sync Messages
 
 ```bash
-# Full sync (first time — fetches entire history)
-telecrawl sync --chat-id -1001234567890 --full -v
+# Sync all configured chats (after running init)
+telecrawl sync --full -v
 
-# Incremental sync (only new messages since last sync)
+# Sync specific chat (overrides config)
 telecrawl sync --chat-id -1001234567890
 
-# Multiple chats
-telecrawl sync --chat-id -1001234567890,-1009876543210
+# Incremental sync (only new messages since last sync)
+telecrawl sync
 ```
 
 ### Search Messages
@@ -91,12 +101,33 @@ telecrawl search "deployment" --chat-id -1001234567890
 telecrawl search "bug fix" -l 10
 ```
 
+### Browse Messages
+
+Rich filtering for browsing history:
+
+```bash
+# Last 24 hours
+telecrawl messages --hours 24
+
+# By author
+telecrawl messages --author john --days 7
+
+# By forum topic
+telecrawl messages --topic 42 --last 20
+
+# Since a specific date, oldest first
+telecrawl messages --since 2025-01-15 --oldest
+
+# JSON output (pipe to jq, feed to agents, etc.)
+telecrawl messages --hours 6 --json
+```
+
 ### Real-Time Tail
 
 Capture messages as they arrive (runs continuously):
 
 ```bash
-telecrawl tail --chat-id -1001234567890
+telecrawl tail
 ```
 
 ### View Recent Messages
@@ -104,6 +135,16 @@ telecrawl tail --chat-id -1001234567890
 ```bash
 telecrawl recent --limit 20
 telecrawl recent --chat-id -1001234567890
+```
+
+### JSON Output
+
+Every command supports `--json` for machine-readable output:
+
+```bash
+telecrawl search "deployment" --json
+telecrawl stats --json
+telecrawl messages --author ben --days 3 --json | jq '.[] | .text'
 ```
 
 ### Database Status

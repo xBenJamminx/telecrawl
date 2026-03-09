@@ -42,6 +42,44 @@ class TeleCrawlQuery:
             'relevance': abs(result.get('rank', 0))
         }
 
+    def get_messages(self,
+                     chat_id: Optional[int] = None,
+                     sender: Optional[str] = None,
+                     sender_id: Optional[int] = None,
+                     topic_id: Optional[int] = None,
+                     since: Optional[float] = None,
+                     limit: int = 50,
+                     oldest_first: bool = False) -> List[Dict[str, Any]]:
+        """Get messages with rich filtering, formatted for display."""
+        results = self.db.get_messages(
+            chat_id=chat_id,
+            sender=sender,
+            sender_id=sender_id,
+            topic_id=topic_id,
+            since=since,
+            limit=limit,
+            oldest_first=oldest_first,
+        )
+        return [self._format_message(r) for r in results]
+
+    def _format_message(self, msg: Dict[str, Any]) -> Dict[str, Any]:
+        """Format a message for display."""
+        sender = msg.get('sender_username') or msg.get('sender_first_name') or 'Unknown'
+        if msg.get('sender_first_name') and msg.get('sender_last_name'):
+            sender = f"{msg['sender_first_name']} {msg['sender_last_name']}"
+
+        timestamp = datetime.fromtimestamp(msg['timestamp']).strftime('%Y-%m-%d %H:%M:%S')
+
+        return {
+            'message_id': msg['message_id'],
+            'chat_id': msg['chat_id'],
+            'topic_id': msg.get('topic_id'),
+            'sender': sender,
+            'sender_id': msg.get('sender_id'),
+            'text': msg.get('text', ''),
+            'timestamp': timestamp,
+        }
+
     def get_recent(self, chat_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
         """Get recent messages."""
         cursor = self.db.conn.cursor()

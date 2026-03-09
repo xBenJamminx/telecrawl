@@ -30,6 +30,13 @@ ENV/
 # Database
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
+
+# Telethon session files
+*.session
+*.session-journal
+.auth_state.json
 
 # IDE
 .vscode/

@@ -2,230 +2,219 @@
 
 Telegram group memory layer with SQLite + FTS5 full-text search.
 
-Mirror your Telegram group messages to a local SQLite database with powerful full-text search capabilities. Similar to discrawl but for Telegram.
+Give your AI agents full conversation memory on Telegram. Syncs complete chat history into a local SQLite database with instant full-text search.
+
+## Why?
+
+Discord has [discrawl](https://github.com/steipete/discrawl) — agents can search Discord history natively because Discord's Bot API supports it. Telegram's Bot API has **no method to read message history**. Bots can only see new messages via `getUpdates`, and that conflicts with any gateway already polling.
+
+Telecrawl solves this by using [Telethon](https://github.com/LonamiWebs/Telethon) (Telegram's MTProto user API) to bypass the Bot API entirely. Full history access, zero conflicts, works alongside any bot framework.
 
 ## Features
 
-- 🔄 **Incremental sync** — Only fetch new messages since last sync
-- 🔍 **Full-text search** — SQLite FTS5 with BM25 ranking
-- 📊 **Statistics** — View message counts, activity per chat
-- 🏥 **Health checks** — Verify database integrity
-- 🚀 **Simple CLI** — Easy to use command-line interface
+- **Full history sync** — Fetches every message in a chat, not just new ones
+- **Incremental sync** — After first sync, only fetches messages since last position
+- **Real-time tail** — Background daemon captures messages as they arrive
+- **Full-text search** — SQLite FTS5 with BM25 relevance ranking
+- **FTS5 query sanitization** — Handles URLs, hyphens, and special characters cleanly
+- **Headless auth** — Two-step authentication for servers without interactive terminals
+- **Systemd ready** — Runs as a background service for continuous capture
 
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/telecrawl.git
+git clone https://github.com/xBenJamminx/telecrawl.git
 cd telecrawl
 pip install -e .
 ```
 
-Or install from PyPI:
-
-```bash
-pip install telecrawl
-```
-
 ## Setup
 
-### 1. Create a Telegram Bot
+### 1. Get Telegram API Credentials
 
-1. Open Telegram and message [@BotFather](https://t.me/BotFather)
-2. Send `/newbot` and follow the prompts
-3. Copy the bot token (looks like `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
-4. Add your bot to the group(s) you want to monitor
+1. Go to [my.telegram.org/apps](https://my.telegram.org/apps)
+2. Create an application
+3. Copy your `api_id` and `api_hash`
 
-### 2. Get Chat IDs
-
-To find your chat ID, you can:
-- Forward a message from the group to [@userinfobot](https://t.me/userinfobot)
-- Or use the bot's `getUpdates` endpoint after adding it to the group
-
-### 3. Configure Environment
+### 2. Configure Environment
 
 Create a `.env` file:
 
 ```bash
-TELEGRAM_BOT_TOKEN=your_bot_token_here
+TELEGRAM_API_ID=your_api_id
+TELEGRAM_API_HASH=your_api_hash
 ```
+
+### 3. Authenticate
+
+Telecrawl authenticates as your user account (not a bot). On headless servers, use the two-step auth:
+
+```bash
+# Step 1: Request verification code
+python -m telecrawl.auth request +1XXXXXXXXXX
+
+# Step 2: Enter the code sent to your Telegram
+python -m telecrawl.auth verify 12345
+```
+
+Session persists after first auth — no need to re-authenticate.
+
+### 4. Get Your Chat ID
+
+You can find chat IDs using Telegram clients or bots. Group chat IDs are negative numbers (e.g., `-1001234567890`).
 
 ## Usage
 
 ### Sync Messages
 
-Sync messages from one or more chats:
-
 ```bash
-# Sync a single chat
+# Full sync (first time — fetches entire history)
+telecrawl sync --chat-id -1001234567890 --full -v
+
+# Incremental sync (only new messages since last sync)
 telecrawl sync --chat-id -1001234567890
 
-# Sync multiple chats
+# Multiple chats
 telecrawl sync --chat-id -1001234567890,-1009876543210
-
-# Verbose output
-telecrawl sync --chat-id -1001234567890 -v
 ```
 
 ### Search Messages
-
-Search across all synced messages:
 
 ```bash
 # Basic search
 telecrawl search "python programming"
 
 # Search in specific chat
-telecrawl search "python" --chat-id -1001234567890
+telecrawl search "deployment" --chat-id -1001234567890
 
 # Limit results
-telecrawl search "python" --limit 10
+telecrawl search "bug fix" -l 10
+```
+
+### Real-Time Tail
+
+Capture messages as they arrive (runs continuously):
+
+```bash
+telecrawl tail --chat-id -1001234567890
 ```
 
 ### View Recent Messages
 
 ```bash
-# Show recent messages across all chats
-telecrawl recent
-
-# Recent from specific chat
-telecrawl recent --chat-id -1001234567890
-
-# Limit results
 telecrawl recent --limit 20
+telecrawl recent --chat-id -1001234567890
 ```
 
-### Database Statistics
+### Database Status
 
 ```bash
+# Overview
+telecrawl status
+
+# Statistics
 telecrawl stats
-```
 
-### Health Check
-
-Verify database integrity:
-
-```bash
+# Health check
 telecrawl doctor
 ```
 
-## Database Schema
+## Running as a Service
 
-### Messages Table
+Create a systemd service for continuous message capture:
+
+```ini
+[Unit]
+Description=Telecrawl - Telegram message archiver
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/your/project
+ExecStart=/usr/bin/python3 -m telecrawl tail --chat-id YOUR_CHAT_ID
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=/path/to/your/.env
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl enable telecrawl
+sudo systemctl start telecrawl
+```
+
+## Python API
+
+```python
+import asyncio
+from telethon import TelegramClient
+from telecrawl.db import TeleCrawlDB
+from telecrawl.sync import TelegramSyncer
+from telecrawl.query import TeleCrawlQuery
+
+async def main():
+    # Connect
+    client = TelegramClient('session', api_id, api_hash)
+    await client.start()
+
+    db = TeleCrawlDB("telecrawl.db")
+    db.connect()
+
+    # Sync
+    syncer = TelegramSyncer(client, db)
+    count = await syncer.sync_chat(-1001234567890, verbose=True)
+    print(f"Synced {count} messages")
+
+    # Search
+    query = TeleCrawlQuery(db)
+    results = query.search("deployment issue", limit=10)
+    for r in results:
+        print(f"{r['sender']}: {r['text']}")
+
+    db.close()
+    await client.disconnect()
+
+asyncio.run(main())
+```
+
+## How It Works
+
+1. **Telethon (MTProto)** — Authenticates as a user account, giving full access to `iter_messages()` which returns complete chat history. This is the key difference from Bot API approaches.
+2. **Incremental sync** — Tracks last synced message ID per chat via `min_id` parameter. Only fetches newer messages on subsequent syncs.
+3. **FTS5 index** — Automatically maintained via SQLite triggers. Updated on every insert.
+4. **BM25 ranking** — Search results ranked by relevance, not just recency.
+5. **Query sanitization** — Special characters (dots in URLs, hyphens, slashes) are automatically quoted to prevent FTS5 syntax errors.
+
+## Database Schema
 
 | Column | Type | Description |
 |--------|------|-------------|
-| message_id | INTEGER | Primary key, Telegram message ID |
+| message_id | INTEGER | Primary key (Telegram message ID) |
 | chat_id | INTEGER | Telegram chat ID |
 | topic_id | INTEGER | Topic/thread ID (for forum groups) |
 | sender_id | INTEGER | User ID of sender |
-| sender_username | TEXT | Sender's username |
+| sender_username | TEXT | Sender's @username |
 | sender_first_name | TEXT | Sender's first name |
 | sender_last_name | TEXT | Sender's last name |
 | text | TEXT | Message text content |
 | timestamp | INTEGER | Unix timestamp of message |
 | created_at | INTEGER | Unix timestamp when synced |
 
-### FTS5 Search
-
-The `messages_fts` virtual table enables full-text search across:
-- Message text
-- Sender username
-- Sender first name
-- Sender last name
-
-Search results are ranked using BM25 algorithm.
-
-## Python API
-
-Use telecrawl programmatically:
-
-```python
-from telecrawl.db import TeleCrawlDB
-from telecrawl.sync import TelegramSyncer
-from telecrawl.query import TeleCrawlQuery
-
-# Initialize
-db = TeleCrawlDB("telecrawl.db")
-db.connect()
-
-# Sync messages
-syncer = TelegramSyncer("your_bot_token", db)
-new_messages = syncer.sync_chat(-1001234567890, verbose=True)
-
-# Search
-query_engine = TeleCrawlQuery(db)
-results = query_engine.search("python programming", limit=10)
-
-for result in results:
-    print(f"{result['sender']}: {result['text']}")
-
-# Stats
-stats = query_engine.get_stats()
-print(f"Total messages: {stats['total_messages']}")
-
-# Cleanup
-db.close()
-```
-
-## Advanced Usage
-
-### Custom Database Location
-
-```bash
-telecrawl --db /path/to/custom.db sync --chat-id -1001234567890
-```
-
-### Incremental Sync Pattern
-
-Set up a cron job for continuous sync:
-
-```bash
-*/15 * * * * cd /path/to/telecrawl && telecrawl sync --chat-id -1001234567890
-```
-
-This syncs every 15 minutes. Only new messages are fetched.
-
-## How It Works
-
-1. **First Sync**: Fetches all available messages from Telegram Bot API
-2. **Incremental Sync**: Tracks last synced message ID per chat, only fetches newer messages
-3. **FTS5 Index**: Automatically updated via SQLite triggers when messages are inserted
-4. **BM25 Ranking**: Search results ranked by relevance using BM25 algorithm
-
 ## Limitations
 
-- Bot must be a member of the group to see messages
-- Bot API only provides messages sent after the bot was added
-- Rate limits apply (Telegram Bot API allows ~30 requests/second)
-- Text-only messages (no media sync yet)
-
-## Troubleshooting
-
-### No messages syncing
-
-- Verify bot is added to the group
-- Check bot token is correct
-- Ensure chat ID is correct (negative for groups)
-- Bot needs to remain in the group to sync
-
-### FTS5 errors
-
-Run the doctor command:
-
-```bash
-telecrawl doctor
-```
+- Text messages only (no media sync yet)
+- Requires user account authentication (not bot-only)
+- Telegram rate limits apply (Telethon handles backoff automatically)
 
 ## License
 
 MIT
 
-## Contributing
-
-PRs welcome! Please open an issue first to discuss changes.
-
 ## Credits
 
-Built by Cortana 💜
+Inspired by [discrawl](https://github.com/steipete/discrawl) by Peter Steinberger.
 
-Inspired by discrawl for Discord.
+Discrawl gave Discord agents memory. Telegram had nothing — so telecrawl was built.

@@ -1,6 +1,6 @@
 """
-Database management for telegaf
-Handles SQLite schema, FTS5 setup, and CRUD operations
+Database management for telecrawl.
+Handles SQLite schema, FTS5 setup, and CRUD operations.
 """
 
 import sqlite3
@@ -15,13 +15,14 @@ class TeleCrawlDB:
         self.conn: Optional[sqlite3.Connection] = None
 
     def connect(self):
-        """Initialize database connection and create schema if needed"""
+        """Initialize database connection and create schema if needed."""
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         self._create_schema()
 
     def _create_schema(self):
-        """Create tables and FTS5 virtual table"""
+        """Create tables and FTS5 virtual table."""
         cursor = self.conn.cursor()
 
         # Messages table
@@ -92,7 +93,7 @@ class TeleCrawlDB:
         self.conn.commit()
 
     def insert_message(self, message: Dict[str, Any]) -> bool:
-        """Insert a message into the database"""
+        """Insert a message into the database."""
         cursor = self.conn.cursor()
         try:
             cursor.execute("""
@@ -119,7 +120,7 @@ class TeleCrawlDB:
             return False
 
     def get_last_message_id(self, chat_id: int) -> Optional[int]:
-        """Get the last synced message ID for a chat"""
+        """Get the last synced message ID for a chat."""
         cursor = self.conn.cursor()
         result = cursor.execute(
             "SELECT last_message_id FROM sync_state WHERE chat_id = ?",
@@ -128,7 +129,7 @@ class TeleCrawlDB:
         return result['last_message_id'] if result else None
 
     def update_sync_state(self, chat_id: int, last_message_id: int):
-        """Update sync state for a chat"""
+        """Update sync state for a chat."""
         cursor = self.conn.cursor()
         cursor.execute("""
             INSERT OR REPLACE INTO sync_state (chat_id, last_message_id, last_sync_at)
@@ -136,9 +137,27 @@ class TeleCrawlDB:
         """, (chat_id, last_message_id, int(datetime.now().timestamp())))
         self.conn.commit()
 
+    @staticmethod
+    def _sanitize_fts_query(query: str) -> str:
+        """
+        Sanitize a query string for FTS5.
+
+        FTS5 treats certain characters as operators:
+        - Dots (.) cause syntax errors in URLs like docs.google.com
+        - Hyphens (-) are treated as NOT operator
+        - Slashes, colons, @, # also cause issues
+
+        Wrapping in double quotes makes FTS5 treat it as a literal phrase.
+        """
+        special_chars = '.:/\\@#-'
+        if any(c in query for c in special_chars):
+            return '"' + query.replace('"', '') + '"'
+        return query
+
     def search(self, query: str, chat_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """Search messages using FTS5 with BM25 ranking"""
+        """Search messages using FTS5 with BM25 ranking."""
         cursor = self.conn.cursor()
+        safe_query = self._sanitize_fts_query(query)
 
         if chat_id:
             sql = """
@@ -149,7 +168,7 @@ class TeleCrawlDB:
                 ORDER BY rank
                 LIMIT ?
             """
-            results = cursor.execute(sql, (query, chat_id, limit)).fetchall()
+            results = cursor.execute(sql, (safe_query, chat_id, limit)).fetchall()
         else:
             sql = """
                 SELECT m.*, bm25(messages_fts) as rank
@@ -159,12 +178,12 @@ class TeleCrawlDB:
                 ORDER BY rank
                 LIMIT ?
             """
-            results = cursor.execute(sql, (query, limit)).fetchall()
+            results = cursor.execute(sql, (safe_query, limit)).fetchall()
 
         return [{k: row[k] for k in row.keys()} for row in results]
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get database statistics"""
+        """Get database statistics."""
         cursor = self.conn.cursor()
 
         total_messages = cursor.execute("SELECT COUNT(*) as count FROM messages").fetchone()[0]
@@ -184,21 +203,18 @@ class TeleCrawlDB:
         }
 
     def verify_integrity(self) -> Dict[str, Any]:
-        """Verify database integrity"""
+        """Verify database integrity."""
         cursor = self.conn.cursor()
 
-        # Check FTS5 sync
         fts_count = cursor.execute("SELECT COUNT(*) as count FROM messages_fts").fetchone()[0]
         msg_count = cursor.execute("SELECT COUNT(*) as count FROM messages").fetchone()[0]
 
-        # Check for orphaned FTS entries
         orphaned = cursor.execute("""
             SELECT COUNT(*) as count
             FROM messages_fts
             WHERE rowid NOT IN (SELECT message_id FROM messages)
         """).fetchone()[0]
 
-        # Check for messages without FTS
         missing_fts = cursor.execute("""
             SELECT COUNT(*) as count
             FROM messages
@@ -214,6 +230,6 @@ class TeleCrawlDB:
         }
 
     def close(self):
-        """Close database connection"""
+        """Close database connection."""
         if self.conn:
             self.conn.close()

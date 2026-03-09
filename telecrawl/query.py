@@ -1,15 +1,15 @@
 """
-Search interface for telegaf
-Provides high-level search and query functions
+Search interface for telecrawl.
+Provides high-level search and query functions.
 """
 
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from .db import TelegrafDB
+from .db import TeleCrawlDB
 
 
 class TeleCrawlQuery:
-    def __init__(self, db: TelegrafDB):
+    def __init__(self, db: TeleCrawlDB):
         self.db = db
 
     def search(self,
@@ -17,9 +17,7 @@ class TeleCrawlQuery:
                chat_id: Optional[int] = None,
                limit: int = 50,
                format_output: bool = True) -> List[Dict[str, Any]]:
-        """
-        Search messages with optional formatting
-        """
+        """Search messages with optional formatting."""
         results = self.db.search(query, chat_id=chat_id, limit=limit)
 
         if format_output:
@@ -27,7 +25,7 @@ class TeleCrawlQuery:
         return results
 
     def _format_result(self, result: Dict[str, Any]) -> Dict[str, Any]:
-        """Format search result for display"""
+        """Format search result for display."""
         sender = result.get('sender_username') or result.get('sender_first_name') or 'Unknown'
         if result.get('sender_last_name'):
             sender = f"{result['sender_first_name']} {result['sender_last_name']}"
@@ -41,11 +39,11 @@ class TeleCrawlQuery:
             'sender': sender,
             'text': result.get('text', ''),
             'timestamp': timestamp,
-            'relevance': abs(result.get('rank', 0))  # BM25 score (negative, so abs it)
+            'relevance': abs(result.get('rank', 0))
         }
 
     def get_recent(self, chat_id: Optional[int] = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """Get recent messages"""
+        """Get recent messages."""
         cursor = self.db.conn.cursor()
 
         if chat_id:
@@ -65,9 +63,9 @@ class TeleCrawlQuery:
         return [self._format_result(dict(r)) for r in results]
 
     def get_stats(self) -> Dict[str, Any]:
-        """Get database statistics"""
+        """Get database statistics."""
         return self.db.get_stats()
 
     def verify(self) -> Dict[str, Any]:
-        """Verify database integrity"""
+        """Verify database integrity."""
         return self.db.verify_integrity()

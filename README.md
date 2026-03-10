@@ -2,7 +2,19 @@
 
 Telegram group memory layer with SQLite + FTS5 full-text search.
 
-Give your AI agents full conversation memory on Telegram. Syncs complete chat history into a local SQLite database with instant full-text search.
+Give your OpenClaw agent full conversation memory on Telegram. Syncs complete chat history into a local SQLite database with instant full-text search.
+
+## Quick Start (Let Your Agent Do It)
+
+Send your OpenClaw agent this repo and say **"Install telecrawl and set it up."**
+
+Your agent will handle the clone, install, and config. You'll just need to:
+
+1. Get API credentials from [my.telegram.org/apps](https://my.telegram.org/apps) (takes 30 seconds)
+2. Provide your phone number when asked
+3. Enter the verification code Telegram sends you
+
+That's it. Everything else is automatic.
 
 ## Why?
 
